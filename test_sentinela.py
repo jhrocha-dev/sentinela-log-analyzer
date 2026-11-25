@@ -30,6 +30,19 @@ class ReadEventsTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "event deve ser"):
                     read_events(input_path)
 
+    def test_rejects_duplicate_json_keys(self):
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "events.jsonl"
+            input_path.write_text(
+                '{"timestamp":"2026-10-27T09:00:00Z",'
+                '"source_ip":"203.0.113.1","username":"ana",'
+                '"event":"login_failed","event":"login_success"}',
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(ValueError, "chave JSON duplicada"):
+                read_events(input_path)
+
     def test_normalizes_source_ip_and_timestamp_while_preserving_originals(self):
         with tempfile.TemporaryDirectory() as directory:
             input_path = Path(directory) / "events.jsonl"
@@ -174,8 +187,9 @@ class CliTests(unittest.TestCase):
             with output_path.open(encoding="utf-8", newline="") as output_file:
                 rows = list(csv.DictReader(output_file))
 
-        self.assertEqual(len(rows), len(expected))
-        for row in rows:
+        alert_rows = [row for row in rows if row["record_type"] == "alert"]
+        self.assertEqual(len(alert_rows), len(expected))
+        for row in alert_rows:
             self.assertEqual(expected[row["source_ip"]], row["username"])
             self.assertNotIn(row["username"][0], "=+-@\t\r\n")
             self.assertNotIn(row["source_ip"][0], "=+-@\t\r\n")
@@ -246,11 +260,31 @@ class CliTests(unittest.TestCase):
                 rows = list(csv.DictReader(output_file))
 
         spray_alert = next(row for row in rows if row["rule"] == "AUTH-002")
+        metadata_row = next(row for row in rows if row["record_type"] == "metadata")
         evidence = json.loads(spray_alert["evidence_json"])
-        metadata = json.loads(spray_alert["report_metadata_json"])
+        metadata = json.loads(metadata_row["report_metadata_json"])
         self.assertEqual(len(evidence), int(spray_alert["evidence_count"]))
-        self.assertEqual(spray_alert["input_sha256"], metadata["input_sha256"])
+        self.assertEqual(metadata_row["input_sha256"], metadata["input_sha256"])
         self.assertEqual(metadata["ruleset_version"], "1.0")
+
+    def test_csv_keeps_metadata_when_there_are_no_alerts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "events.jsonl"
+            output_path = Path(directory) / "alerts.csv"
+            input_path.write_text("", encoding="utf-8")
+
+            with patch("sys.argv", [
+                "sentinela", "--input", str(input_path),
+                "--format", "csv", "--output", str(output_path),
+            ]):
+                self.assertEqual(main(), 0)
+
+            with output_path.open(encoding="utf-8", newline="") as output_file:
+                rows = list(csv.DictReader(output_file))
+
+        self.assertEqual([row["record_type"] for row in rows], ["metadata"])
+        metadata = json.loads(rows[0]["report_metadata_json"])
+        self.assertEqual(metadata["input_sha256"], rows[0]["input_sha256"])
 
 
 class AnalysisTests(unittest.TestCase):

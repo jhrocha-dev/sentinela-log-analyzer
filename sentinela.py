@@ -110,6 +110,10 @@ class Report(TypedDict):
     alerts: list[Alert]
 
 
+class DuplicateJsonKeyError(ValueError):
+    pass
+
+
 RULESET_VERSION = "1.0"
 TOOL_VERSION = "0.2.0"
 RULES: dict[str, RuleInfo] = {
@@ -145,6 +149,17 @@ def is_json_object(value: object) -> TypeGuard[dict[str, object]]:
     return isinstance(value, dict)
 
 
+def _reject_duplicate_json_keys(
+    pairs: list[tuple[str, object]],
+) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise DuplicateJsonKeyError(key)
+        result[key] = value
+    return result
+
+
 def _optional_text(item: dict[str, object], key: str, line: int) -> str | None:
     value = item.get(key)
     if value is None:
@@ -175,7 +190,13 @@ def _parse_events(content: bytes) -> list[Event]:
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         try:
-            item: object = json.loads(line)
+            item: object = json.loads(
+                line, object_pairs_hook=_reject_duplicate_json_keys,
+            )
+        except DuplicateJsonKeyError as exc:
+            raise ValueError(
+                f"Linha {number}: chave JSON duplicada ({exc})."
+            ) from exc
         except json.JSONDecodeError as exc:
             raise ValueError(
                 f"Linha {number}: JSON inválido ({exc.msg})."
@@ -623,6 +644,12 @@ def main() -> int:
             metadata_json = json.dumps(
                 report["metadata"], ensure_ascii=False, sort_keys=True,
             )
+            writer.writerow({
+                "record_type": "metadata",
+                "input_sha256": report["metadata"]["input_sha256"],
+                "ruleset_version": report["metadata"]["ruleset_version"],
+                "report_metadata_json": safe_csv_value(metadata_json),
+            })
             for item in report["alerts"]:
                 writer.writerow({
                     "record_type": "alert",
@@ -647,9 +674,6 @@ def main() -> int:
                     "evidence_json": safe_csv_value(json.dumps(
                         item["evidence"], ensure_ascii=False,
                     )),
-                    "input_sha256": report["metadata"]["input_sha256"],
-                    "ruleset_version": report["metadata"]["ruleset_version"],
-                    "report_metadata_json": safe_csv_value(metadata_json),
                 })
             output = stream.getvalue()
 

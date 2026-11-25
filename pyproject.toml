@@ -9,7 +9,6 @@ description = "Analisador offline de eventos de autenticação para estudos de B
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "José Henrique Rocha" }]
 dependencies = []
 
 [project.scripts]

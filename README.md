@@ -39,7 +39,7 @@ python sentinela.py --input sample_auth_events.jsonl `
 | `AUTH-004` | Tentativa ou sucesso de login em conta marcada como desativada. |
 | `AUTH-005` | Falhas de MFA para a mesma conta e origem acima do limiar na janela. |
 
-O relatório JSON inclui versão do esquema e das regras, limiares, horário da análise, SHA-256 do arquivo de entrada, limitações declaradas e os eventos que sustentam cada alerta. Cada evidência registra o número da linha e o ID do evento (ou um ID derivado da linha), o timestamp original e o timestamp normalizado em UTC. O CSV inclui evidências e metadados em colunas JSON; quando não há alertas, contém apenas o cabeçalho.
+O relatório JSON inclui versão do esquema e das regras, limiares, horário da análise, SHA-256 do arquivo de entrada, limitações declaradas e os eventos que sustentam cada alerta. Cada evidência registra o número da linha e o ID do evento (ou um ID derivado da linha), o timestamp original e o timestamp normalizado em UTC. O CSV contém uma linha `metadata` com metadados em JSON e uma linha `alert` por alerta, com as respectivas evidências. Se nenhum alerta for encontrado, a linha de metadados continua presente.
 
 ## Formato de entrada
 
