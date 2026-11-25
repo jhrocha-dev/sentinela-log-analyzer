@@ -13,7 +13,7 @@ authors = [{ name = "José Henrique Rocha" }]
 dependencies = []
 
 [project.scripts]
-sentinela = "sentinela.cli:main"
+sentinela = "sentinela:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+py-modules = ["sentinela"]
