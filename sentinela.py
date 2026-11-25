@@ -504,7 +504,17 @@ def analyze(
             first_time = success["_time"] - timedelta(minutes=minutes)
             first_index = bisect_left(failure_times, first_time)
             last_index = bisect_right(failure_times, success["_time"])
-            recent_failures = failure_events[first_index:last_index]
+            recent_failures = [
+                failure
+                for failure in failure_events[first_index:last_index]
+                if (
+                    failure["_time"] < success["_time"]
+                    or (
+                        failure["_time"] == success["_time"]
+                        and failure["source_line"] < success["source_line"]
+                    )
+                )
+            ]
             if len(recent_failures) >= success_after_failures_threshold:
                 evidence = recent_failures + [success]
                 alerts.append(alert(

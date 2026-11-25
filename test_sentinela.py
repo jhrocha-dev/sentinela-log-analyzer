@@ -391,6 +391,35 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(len(success_alert["evidence"]), 4)
         self.assertEqual(success_alert["last_seen_utc"], "2026-10-27T12:10:00Z")
 
+    def test_auth003_respects_source_order_for_identical_timestamps(self):
+        timestamp = "2026-10-27T09:00:00Z"
+        failures = [{
+            "timestamp": timestamp,
+            "source_ip": "203.0.113.15",
+            "username": "ana",
+            "event": "login_failed",
+        } for _ in range(3)]
+        success = {
+            "timestamp": timestamp,
+            "source_ip": "203.0.113.15",
+            "username": "ana",
+            "event": "login_success",
+        }
+
+        with_success_first = self._events([success, *failures])
+        report = analyze(with_success_first, 10, 5, 5)
+        self.assertNotIn("AUTH-003", {item["rule"] for item in report["alerts"]})
+
+        with_success_last = self._events([*failures, success])
+        report = analyze(with_success_last, 10, 5, 5)
+        success_alert = next(
+            item for item in report["alerts"] if item["rule"] == "AUTH-003"
+        )
+        self.assertEqual(
+            [item["source_line"] for item in success_alert["evidence"]],
+            [1, 2, 3, 4],
+        )
+
     def test_rejects_non_positive_thresholds_when_called_as_library(self):
         with self.assertRaisesRegex(ValueError, "limiares devem ser pelo menos 1"):
             analyze([], 0, 5, 5)
