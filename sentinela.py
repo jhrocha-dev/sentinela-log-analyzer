@@ -87,7 +87,7 @@ class ReportSummary(TypedDict):
 
 
 class RuleInfo(TypedDict):
-    severity: Severity
+    severity: Severity | Literal["variable"]
     description: str
     detection: str
 
@@ -133,9 +133,12 @@ RULES: dict[str, RuleInfo] = {
         "detection": "Falhas iguais ou acima de success_after_failures_threshold.",
     },
     "AUTH-004": {
-        "severity": "medium",
+        "severity": "variable",
         "description": "Tentativa de autenticação contra uma conta marcada como desativada.",
-        "detection": "Evento de login com account_status igual a disabled.",
+        "detection": (
+            "Tentativa de login: medium; login bem-sucedido: high; "
+            "account_status igual a disabled."
+        ),
     },
     "AUTH-005": {
         "severity": "medium",
@@ -617,8 +620,20 @@ def main() -> int:
     )
     if min(thresholds) < 1:
         parser.error("minutos e limiares devem ser pelo menos 1")
-    if args.output is not None and args.output.resolve() == args.input.resolve():
-        parser.error("o arquivo de saída não pode sobrescrever o arquivo de entrada")
+    if args.output is not None:
+        same_path = args.output.resolve() == args.input.resolve()
+        try:
+            same_file = (
+                args.output.exists()
+                and args.input.exists()
+                and args.output.samefile(args.input)
+            )
+        except OSError as exc:
+            parser.error(f"não foi possível verificar os arquivos: {exc}")
+        if same_path or same_file:
+            parser.error(
+                "o arquivo de saída não pode sobrescrever o arquivo de entrada"
+            )
 
     try:
         events, input_sha256 = read_events_with_hash(args.input)

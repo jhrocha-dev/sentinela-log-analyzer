@@ -2,6 +2,7 @@ import csv
 from collections.abc import Mapping, Sequence
 import hashlib
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -227,6 +228,32 @@ class CliTests(unittest.TestCase):
         self.assertEqual(error.exception.code, 2)
         self.assertEqual(SAMPLE_EVENTS.read_text(encoding="utf-8"), original_content)
 
+    def test_cli_prevents_overwriting_input_through_hard_link(self):
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "events.jsonl"
+            output_path = Path(directory) / "report.json"
+            original_content = (
+                '{"timestamp":"2026-10-27T09:00:00Z",'
+                '"source_ip":"203.0.113.1","username":"ana",'
+                '"event":"login_success"}\n'
+            )
+            input_path.write_text(original_content, encoding="utf-8")
+            try:
+                os.link(input_path, output_path)
+            except OSError as exc:
+                self.skipTest(f"hard links are unavailable: {exc}")
+
+            with patch("sys.argv", [
+                "sentinela", "--input", str(input_path),
+                "--output", str(output_path),
+            ]):
+                with patch("sys.stderr"):
+                    with self.assertRaises(SystemExit) as error:
+                        main()
+
+            self.assertEqual(error.exception.code, 2)
+            self.assertEqual(input_path.read_text(encoding="utf-8"), original_content)
+
     def test_json_report_contains_hash_and_rule_thresholds(self):
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "report.json"
@@ -244,6 +271,7 @@ class CliTests(unittest.TestCase):
         )
         self.assertEqual(report["metadata"]["ruleset_version"], "1.0")
         self.assertEqual(report["metadata"]["thresholds"]["mfa_failure_threshold"], 5)
+        self.assertEqual(report["metadata"]["rules"]["AUTH-004"]["severity"], "variable")
         self.assertIn("analysis_time_utc", report["metadata"])
         self.assertTrue(report["alerts"][0]["evidence"])
 
